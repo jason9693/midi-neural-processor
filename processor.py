@@ -72,8 +72,10 @@ def _divide_note(mid_path):
 
     for inst in mid.instruments:
         notes += inst.notes
-
     notes.sort(key=lambda x: x.start)
+
+    # TODO: erase
+    print(notes)
     for note in notes:
         on = SplitNote('note_on', note.start, note.pitch, note.velocity)
         off = SplitNote('note_off', note.end, note.pitch, None)
@@ -82,10 +84,22 @@ def _divide_note(mid_path):
 
 
 def _merge_note(snote_sequence):
-    note_on_queue = [snote for snote in snote_sequence if snote.type == 'note_on']
-    note_off_queue = []
-    # for snote in snote_sequence:
+    note_on_dict = {}
+    result_array = []
 
+    for snote in snote_sequence:
+        # print(note_on_dict)
+        if snote.type == 'note_on':
+            note_on_dict[snote.value] = snote
+        elif snote.type == 'note_off':
+            try:
+                on = note_on_dict[snote.value]
+                off = snote
+                result = pretty_midi.Note(on.velocity, snote.value, on.time, off.time)
+                result_array.append(result)
+            except:
+                print('info removed pitch: {}'.format(snote.value))
+    return result_array
 
 
 def _snote2events(snote: SplitNote, prev_vel: int):
@@ -105,7 +119,7 @@ def _event_seq2snote_seq(event_sequence):
 
     for event in event_sequence:
         if event.type == 'time_shift':
-            timeline += (event.value / 100)
+            timeline += ((event.value+1) / 100)
         if event.type == 'velocity':
             velocity = event.value * 4
         else:
@@ -115,7 +129,7 @@ def _event_seq2snote_seq(event_sequence):
 
 
 def _make_time_sift_events(prev_time, post_time):
-    time_interval = int((post_time - prev_time) * 100)
+    time_interval = int(round((post_time - prev_time) * 100))
     results = []
     while time_interval >= RANGE_TIME_SHIFT:
         results.append(Event(event_type='time_shift', value=RANGE_TIME_SHIFT-1))
@@ -129,31 +143,45 @@ def _make_time_sift_events(prev_time, post_time):
 def encode_midi(file_path):
     events = []
     dnotes = _divide_note(file_path)
+    # print(dnotes)
     dnotes.sort(key=lambda x: x.time)
-
+    # print('sorted:')
+    # print(dnotes)
     cur_time = 0
     cur_vel = 0
     for snote in dnotes:
-        events += _snote2events(snote=snote, prev_vel=cur_vel)
         events += _make_time_sift_events(prev_time=cur_time, post_time=snote.time)
+        events += _snote2events(snote=snote, prev_vel=cur_vel)
+        # events += _make_time_sift_events(prev_time=cur_time, post_time=snote.time)
 
         cur_time = snote.time
         cur_vel = snote.velocity
     # print([(e,e.to_int()) for e in events])
+    # print('event in encode')
+    # print(events)
     return [e.to_int() for e in events]
 
 
-# TODO: add decode code
 def decode_midi(idx_array):
     event_sequence = [Event.from_int(idx) for idx in idx_array]
+    print(event_sequence)
     snote_seq = _event_seq2snote_seq(event_sequence)
+    note_seq = _merge_note(snote_seq)
+    note_seq.sort(key=lambda x:x.start)
 
+    mid = pretty_midi.PrettyMIDI()
+    # if want to change instument, see https://www.midi.org/specifications/item/gm-level-1-sound-set
+    instument = pretty_midi.Instrument(1, False, "Developed By Yang-Kichang")
+    instument.notes = note_seq
 
-    pass
+    mid.instruments.append(instument)
+    return mid
 
 
 if __name__ == '__main__':
-    print(encode_midi('bin/ADIG04.mid'))
+    encoded = encode_midi('bin/ADIG04.mid')
+    # print(encode_midi('bin/ADIG04.mid'))
+    print(decode_midi(encoded).instruments[0].notes)
 
 # ins = pretty_midi.PrettyMIDI('bin/ADIG04.mid')
 # print(ins)
