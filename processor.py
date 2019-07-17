@@ -75,7 +75,8 @@ def _divide_note(mid_path):
     notes.sort(key=lambda x: x.start)
 
     # TODO: erase
-    print(notes)
+    pprint.pprint([note for note in notes if note.pitch==54])
+
     for note in notes:
         on = SplitNote('note_on', note.start, note.pitch, note.velocity)
         off = SplitNote('note_off', note.end, note.pitch, None)
@@ -95,6 +96,8 @@ def _merge_note(snote_sequence):
             try:
                 on = note_on_dict[snote.value]
                 off = snote
+                if off.time - on.time == 0:
+                    continue
                 result = pretty_midi.Note(on.velocity, snote.value, on.time, off.time)
                 result_array.append(result)
             except:
@@ -162,9 +165,9 @@ def encode_midi(file_path):
     return [e.to_int() for e in events]
 
 
-def decode_midi(idx_array):
+def decode_midi(idx_array, file_path=None):
     event_sequence = [Event.from_int(idx) for idx in idx_array]
-    print(event_sequence)
+    # print(event_sequence)
     snote_seq = _event_seq2snote_seq(event_sequence)
     note_seq = _merge_note(snote_seq)
     note_seq.sort(key=lambda x:x.start)
@@ -175,20 +178,23 @@ def decode_midi(idx_array):
     instument.notes = note_seq
 
     mid.instruments.append(instument)
+    if file_path is not None:
+        mid.write(file_path)
     return mid
 
 
 if __name__ == '__main__':
+    import pprint
     encoded = encode_midi('bin/ADIG04.mid')
     # print(encode_midi('bin/ADIG04.mid'))
-    print(decode_midi(encoded).instruments[0].notes)
+    pprint.pprint(
+        [note for note in decode_midi(encoded, 'bin/test.mid').instruments[0].notes if note.pitch == 54])
 
-# ins = pretty_midi.PrettyMIDI('bin/ADIG04.mid')
-# print(ins)
-#
-# for i in ins.instruments:
-#     notes = i.notes
-#     notes.sort(key=lambda x: x.start)
-#     for j in notes:
-#        print('start:{} end: {}, pitch: {}, vel: {}'.format(j.start, j.end, j.pitch, j.velocity//4))
+    # note.end-note.start > 3])
+    print(decode_midi(encoded, 'bin/test.mid').instruments[0].control_changes)
+    ins = pretty_midi.PrettyMIDI('bin/ADIG04.mid')
+    print(ins)
+    print(ins.instruments[0])
+    for i in ins.instruments:
+        print(i.control_changes)
 
