@@ -40,7 +40,7 @@ decode_midi(encoded, 'bin/test.mid') ## 'bin/test.mid' is midi file path.
 
 
 
-## Commint Soon
+## Comming Soon
 
 1. Pedal Control
 2. Midi Converter to .tfrecords
