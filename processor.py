@@ -92,11 +92,7 @@ class Event:
 
 def _divide_note(notes):
     result_array = []
-
     notes.sort(key=lambda x: x.start)
-
-    # TODO: erase
-    # pprint.pprint([note for note in notes if note.pitch==54])
 
     for note in notes:
         on = SplitNote('note_on', note.start, note.pitch, note.velocity)
@@ -185,7 +181,6 @@ def _control_preprocess(ctrl_changes):
 def _note_preprocess(susteins, notes):
     note_stream = []
 
-    # TODO: implement
     for sustain in susteins:
         for note_idx, note in enumerate(notes):
             if note.start < sustain.start:
@@ -206,13 +201,13 @@ def _note_preprocess(susteins, notes):
 
 def encode_midi(file_path):
     events = []
-
     notes = []
     mid = pretty_midi.PrettyMIDI(midi_file=file_path)
 
-    sustain_manager = None
     for inst in mid.instruments:
         inst_notes = inst.notes
+        # ctrl.number is the number of sustain control. If you want to know abour the number type of control,
+        # see https://www.midi.org/specifications-old/item/table-3-control-change-messages-data-bytes-2
         ctrls = _control_preprocess([ctrl for ctrl in inst.control_changes if ctrl.number == 64])
         notes += _note_preprocess(ctrls, inst_notes)
 
