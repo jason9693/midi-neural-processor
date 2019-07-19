@@ -14,6 +14,31 @@ START_IDX = {
 }
 
 
+class SustainAdapter:
+    def __init__(self, time, type):
+        self.start =  time
+        self.type = type
+
+
+class SustainDownManager:
+    def __init__(self, start, end):
+        self.start = start
+        self.end = end
+        self.managed_notes = []
+        self._note_dict = {} # key: pitch, value: note.start
+
+    def add_managed_note(self, note: pretty_midi.Note):
+        self.managed_notes.append(note)
+
+    def transposition_notes(self):
+        for note in reversed(self.managed_notes):
+            try:
+                note.end = self._note_dict[note.pitch]
+            except KeyError:
+                note.end = max(self.end, note.end)
+            self._note_dict[note.pitch] = note.start
+
+
 # Divided note by note_on, note_off
 class SplitNote:
     def __init__(self, type, time, value, velocity):
@@ -65,17 +90,13 @@ class Event:
             return {'type': 'velocity', 'value': valid_value}
 
 
-def _divide_note(mid_path):
+def _divide_note(notes):
     result_array = []
-    notes = []
-    mid = pretty_midi.PrettyMIDI(midi_file=mid_path)
 
-    for inst in mid.instruments:
-        notes += inst.notes
     notes.sort(key=lambda x: x.start)
 
     # TODO: erase
-    pprint.pprint([note for note in notes if note.pitch==54])
+    # pprint.pprint([note for note in notes if note.pitch==54])
 
     for note in notes:
         on = SplitNote('note_on', note.start, note.pitch, note.velocity)
@@ -143,9 +164,60 @@ def _make_time_sift_events(prev_time, post_time):
         return results + [Event(event_type='time_shift', value=time_interval-1)]
 
 
+def _control_preprocess(ctrl_changes):
+    sustains = []
+
+    manager = None
+    for ctrl in ctrl_changes:
+        if ctrl.value >= 64 and manager is None:
+            # sustain down
+            manager = SustainDownManager(start=ctrl.time, end=None)
+        elif ctrl.value < 64 and manager is not None:
+            # sustain up
+            manager.end = ctrl.time
+            sustains.append(manager)
+            manager = None
+        elif ctrl.value < 64 and len(sustains) > 0:
+            sustains[-1].end = ctrl.time
+    return sustains
+
+
+def _note_preprocess(susteins, notes):
+    note_stream = []
+
+    # TODO: implement
+    for sustain in susteins:
+        for note_idx, note in enumerate(notes):
+            if note.start < sustain.start:
+                note_stream.append(note)
+            elif note.start > sustain.end:
+                notes = notes[note_idx:]
+                sustain.transposition_notes()
+                break
+            else:
+                sustain.add_managed_note(note)
+
+    for sustain in susteins:
+        note_stream += sustain.managed_notes
+
+    note_stream.sort(key= lambda x: x.start)
+    return note_stream
+
+
 def encode_midi(file_path):
     events = []
-    dnotes = _divide_note(file_path)
+
+    notes = []
+    mid = pretty_midi.PrettyMIDI(midi_file=file_path)
+
+    sustain_manager = None
+    for inst in mid.instruments:
+        inst_notes = inst.notes
+        ctrls = _control_preprocess([ctrl for ctrl in inst.control_changes if ctrl.number == 64])
+        notes += _note_preprocess(ctrls, inst_notes)
+
+    dnotes = _divide_note(notes)
+
     # print(dnotes)
     dnotes.sort(key=lambda x: x.time)
     # print('sorted:')
@@ -159,9 +231,7 @@ def encode_midi(file_path):
 
         cur_time = snote.time
         cur_vel = snote.velocity
-    # print([(e,e.to_int()) for e in events])
-    # print('event in encode')
-    # print(events)
+
     return [e.to_int() for e in events]
 
 
@@ -184,17 +254,14 @@ def decode_midi(idx_array, file_path=None):
 
 
 if __name__ == '__main__':
-    import pprint
     encoded = encode_midi('bin/ADIG04.mid')
-    # print(encode_midi('bin/ADIG04.mid'))
-    pprint.pprint(
-        [note for note in decode_midi(encoded, 'bin/test.mid').instruments[0].notes if note.pitch == 54])
+    print(encoded)
+    decided = decode_midi(encoded,file_path='bin/test.mid')
 
-    # note.end-note.start > 3])
-    print(decode_midi(encoded, 'bin/test.mid').instruments[0].control_changes)
     ins = pretty_midi.PrettyMIDI('bin/ADIG04.mid')
     print(ins)
     print(ins.instruments[0])
     for i in ins.instruments:
         print(i.control_changes)
+        print(i.notes)
 
