@@ -181,19 +181,24 @@ def _control_preprocess(ctrl_changes):
 def _note_preprocess(susteins, notes):
     note_stream = []
 
-    for sustain in susteins:
-        for note_idx, note in enumerate(notes):
-            if note.start < sustain.start:
-                note_stream.append(note)
-            elif note.start > sustain.end:
-                notes = notes[note_idx:]
-                sustain.transposition_notes()
-                break
-            else:
-                sustain.add_managed_note(note)
+    if susteins:    # if the midi file has sustain controls
+        for sustain in susteins:
+            for note_idx, note in enumerate(notes):
+                if note.start < sustain.start:
+                    note_stream.append(note)
+                elif note.start > sustain.end:
+                    notes = notes[note_idx:]
+                    sustain.transposition_notes()
+                    break
+                else:
+                    sustain.add_managed_note(note)
 
-    for sustain in susteins:
-        note_stream += sustain.managed_notes
+        for sustain in susteins:
+            note_stream += sustain.managed_notes
+    
+    else:       # else, just push everything into note stream
+        for note_idx, note in enumerate(notes):
+            note_stream.append(note)
 
     note_stream.sort(key= lambda x: x.start)
     return note_stream
